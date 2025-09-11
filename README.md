@@ -1,81 +1,60 @@
-# git-template
+## ns-3 を Docker で動かして簡単な TCP 実験をする
 
-Git template with GitHub Actions workflows
+### 概要
 
-## 概要
+Docker 上で ns-3 (CMake 版) をビルド・インストールし、2 ノードの PointToPoint を用いた最小の TCP 実験を C++ で実行します。
 
-このリポジトリは、新しいプロジェクトを始める際のテンプレートとして使用できます。包括的なGitHub Actionsワークフローとプロジェクト設定が含まれています。
+### 事前準備
 
-## 含まれている機能
+- Docker がインストールされていること
 
-### GitHub Actions ワークフロー
+### ビルド
 
-#### 1. CI/CD Pipeline (`sample.yaml`)
+```bash
+docker build -t ns3-sim:latest .
+```
 
-- **リント・フォーマットチェック**: ESLint、Prettierによるコード品質チェック
-- **テスト実行**: 複数のNode.jsバージョンでのテスト実行
-- **セキュリティスキャン**: Trivyによる脆弱性スキャン
-- **Dockerイメージビルド**: GitHub Container Registryへのプッシュ
-- **デプロイメント**: ステージング・本番環境への自動デプロイ
-- **リリース作成**: 自動的なリリースノート生成
+### 実行（サンプル）
 
-#### 2. 依存関係更新 (`dependency-update.yaml`)
+インタラクティブに入って実行:
 
-- 週次での依存関係自動更新
-- 自動PR作成による更新管理
+```bash
+docker run --rm -it ns3-sim:latest
+# /app にプロジェクトが配置済み。必要ならリビルド
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
+./build/sim --duration=5 --rate=10Mbps --delay=2ms --mtu=1500 --pcap=1
+```
 
-#### 3. コード品質チェック (`code-quality.yaml`)
+1 コマンドで実行（非対話）:
 
-- SonarQubeによる静的コード解析
-- TypeScript型チェック
-- Lighthouse CI によるパフォーマンステスト
-- Bundle sizeチェック
+```bash
+docker run --rm ns3-sim:latest bash -lc "./build/sim --duration=5 --rate=10Mbps --delay=2ms --mtu=1500 --pcap=1 | cat"
+```
 
-### プロジェクト管理
+### 出力
 
-#### イシューテンプレート
+- 標準出力: 受信総バイト数 (Total Bytes Received)
+- `pcap=1` の場合: `/app` 直下に `tcp-two-nodes-*.pcap` が生成され、Wireshark 等で解析可能
 
-- **Bug Report**: バグ報告用のテンプレート
-- **Feature Request**: 新機能提案用のテンプレート
+### コード概要
 
-#### PR テンプレート
+- `src/main.cpp`: 2 ノード (送信/受信) を P2P で接続。`BulkSendApplication` → `PacketSink` で TCP スループットを観測。
+- `CMakeLists.txt`: ns-3 のモジュールを `pkg-config` でリンク
+- `Dockerfile`: Fedora ベースで ns-3 ソースをクローンし、CMake でビルド・インストール後に本プロジェクトをビルド
 
-- 標準化されたプルリクエストテンプレート
-- チェックリスト付きレビュープロセス
+### 実験パラメータ
 
-#### Dependabot設定
+- `--duration`: シミュレーション時間（秒）
+- `--rate`: P2P リンク帯域（例: `10Mbps`）
+- `--delay`: 片道遅延（例: `2ms`）
+- `--mtu`: MTU（bytes）
+- `--pcap`: pcap トレースの有効/無効（1/0）
 
-- npm、GitHub Actions、Docker依存関係の自動更新
-- 日本時間での週次更新スケジュール
+### よくある質問
 
-## 使用方法
-
-1. このテンプレートを使用して新しいリポジトリを作成
-2. 使用目的や言語に合わせて [gitignore.io](https://www.toptal.com/developers/gitignore) から gitignore ファイルを作成
-   - 以下のコマンドを実行することで直接 gitignore ファイルを作成できます
-
-      ```shell
-      curl https://www.toptal.com/developers/gitignore/api/{{ your language }},visualstudiocode -o ./.gitignore
-      ```
-
-3. プロジェクトの要件に応じてワークフローをカスタマイズ
-4. 必要なシークレットを GitHub Settings で設定:
-   - `SONAR_TOKEN`: SonarQubeトークン
-   - `CC_TEST_REPORTER_ID`: CodeClimate テストレポーターID
-   - `LHCI_GITHUB_APP_TOKEN`: Lighthouse CI トークン
-
-## カスタマイズ
-
-各ワークフローファイルは、プロジェクトの要件に応じてカスタマイズできます：
-
-- Node.js バージョンの変更
-- テストコマンドの調整
-- デプロイ先の設定
-- 通知設定の追加
-
-## 注意事項
-
-- 一部のワークフローは外部サービス（SonarQube、CodeClimate等）の設定が必要です
-- プロジェクトの性質に応じて不要なワークフローは削除してください
-- シークレットの設定を忘れずに行ってください
-- 使用したい機能のyamlファイルについて、各自`.deny`を取り除いた上で使用してください
+- 異なる TCP バリアントで試すには？
+  - 例: CUBIC を用いる場合
+    ```bash
+    ./build/sim --duration=5 --rate=10Mbps --delay=2ms --mtu=1500 --pcap=1 --cmd='Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue("ns3::TcpCubic"));'
+    ```
+  - もしくは `src/main.cpp` 内で `Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue("ns3::TcpCubic"));` を追加してください。
