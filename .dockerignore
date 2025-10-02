@@ -7,3 +7,5 @@ LICENSE
 
 .DS_Store*
 *.DS_Store
+
+./src/plots/*

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  simulation:
+    build:
+      context: ./simulation
+    volumes:
+      - ./results:/simulation/results
+      - ./simulation/src:/simulation
+
+  plotting:
+    build:
+      context: ./plotting
+    volumes:
+      - ./results:/plotting/data
+      - ./plots:/plotting/plots
+      - ./plotting/src:/plotting
+    depends_on:
+      - simulation
